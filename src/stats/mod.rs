@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -88,6 +88,93 @@ impl RTPStatsReader {
 
         SystemTime::UNIX_EPOCH + Duration::from_millis(millis)
     }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct RTCPStats {
+    rtt_ms: Arc<AtomicU64>,
+    loss: Arc<AtomicU8>,
+    fir_count: Arc<AtomicU64>,
+    pli_count: Arc<AtomicU64>,
+    nack_count: Arc<AtomicU64>,
+}
+
+impl RTCPStats {
+    fn get_reader(&self) -> RTCPStatsReader {
+        RTCPStatsReader {
+            rtt_ms: self.rtt_ms.clone(),
+            loss: self.loss.clone(),
+            fir_count: self.fir_count.clone(),
+            pli_count: self.pli_count.clone(),
+            nack_count: self.nack_count.clone(),
+        }
+    }
+
+    fn write_rtt_ms(&self, rtt: f64) {
+        store_f64_in_u64(&self.rtt_ms, rtt);
+    }
+
+    fn write_loss(&self, loss: u8) {
+        self.loss.store(loss, Ordering::SeqCst);
+    }
+
+    fn write_fir(&self, fir_count: u64) {
+        self.fir_count.fetch_add(fir_count, Ordering::SeqCst);
+    }
+
+    fn write_pli(&self, pli_count: u64) {
+        self.pli_count.fetch_add(pli_count, Ordering::SeqCst);
+    }
+
+    fn write_nack(&self, nack_count: u64) {
+        self.nack_count.fetch_add(nack_count, Ordering::SeqCst);
+    }
+}
+#[derive(Clone, Debug, Default)]
+/// Reader half of RTCPStats.
+pub struct RTCPStatsReader {
+    rtt_ms: Arc<AtomicU64>,
+    loss: Arc<AtomicU8>,
+    fir_count: Arc<AtomicU64>,
+    pli_count: Arc<AtomicU64>,
+    nack_count: Arc<AtomicU64>,
+}
+
+impl RTCPStatsReader {
+    pub fn rtt_ms(&self) -> f64 {
+        read_f64_stored_as_u64(&self.rtt_ms)
+    }
+
+    pub fn fir_count(&self) -> u64 {
+        self.fir_count.load(Ordering::SeqCst)
+    }
+
+    pub fn pli_count(&self) -> u64 {
+        self.pli_count.load(Ordering::SeqCst)
+    }
+
+    pub fn nack_count(&self) -> u64 {
+        self.nack_count.load(Ordering::SeqCst)
+    }
+}
+
+// Safety guarantee used to store f64 values in AtomicU64.
+const _: [(); core::mem::size_of::<u64>()] = [(); core::mem::size_of::<f64>()];
+
+/// Stores an f64 in an atomic u64.
+#[inline(always)]
+pub fn store_f64_in_u64(container: &AtomicU64, value: f64) {
+    let as_u64: u64 = value.to_bits();
+
+    container.store(as_u64, Ordering::SeqCst);
+}
+
+/// Read an f64 stored in an atomic u64.
+#[inline(always)]
+pub fn read_f64_stored_as_u64(container: &AtomicU64) -> f64 {
+    let value = container.load(Ordering::SeqCst);
+
+    f64::from_bits(value)
 }
 
 #[cfg(test)]
