@@ -10,6 +10,9 @@ pub fn make_stats_interceptor(id: &str) -> Arc<StatsInterceptor> {
     Arc::new(StatsInterceptor::new(id.to_owned()))
 }
 
+// TODO: This file uses `Arc<Atomic*>` for a lot of its types, this will not do as a reader can
+// observe intermediate states. These need to be migrated to a Mutex
+
 #[derive(Debug, Default)]
 /// Records stats about a given RTP stream.
 pub struct RTPStats {
